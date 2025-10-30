@@ -1,39 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-
-void select_process(){
-    int usr_input = 0;
-
-    while(usr_input < 1 || usr_input > 3)
-    {
-        printf
-        (
-            "\nWhich file you want to process?\n"
-            "Enter 1 to pick the largest file\n"
-            "Enter 2 to pick the smallest file\n"
-            "Enter 3 to specify the name of a file\n"
-            "Enter a choice from 1 to 3: "
-        );
-
-        scanf("%d", &usr_input);
-
-        switch (usr_input)
-        {
-            case 1:
-                // pick largest file
-                break;
-            case 2:
-                // pick smallest file
-                break;
-            case 3:
-                // specify file name
-                break;
-            default:
-                printf("You entered an incorrect choice. Try again.\n");
-                break;
-        }
-    }
-}
+#include "process.h"
 
 int main(){
     int usr_input = 0;
@@ -52,7 +19,7 @@ int main(){
         switch (usr_input)
         {
             case 1:
-                select_process();
+                process_select();
                 break;
             case 2:
                 break;
