@@ -1,140 +1,139 @@
-#include <stdbool.h>
 #include "process.h"
 
-static bool is_movie_file(char* dirName)
+static void freeYearFiles(yearFile_t* head)
 {
-    // check if begins with "movies_"
-    if(strncmp(dirName, "movies_", 7) != 0)
-    {
-        return false;
-    }
+    yearFile_t* tmp;
 
-    // check if ends with ".csv"
-    char* extension_start = strrchr(dirName, '.');
-    if (extension_start == NULL || strcmp(extension_start, ".csv") != 0)
+    while (head != NULL)
     {
-        return false;
+        close(head->yearfd);
+        tmp = head;
+        head = head->next;
+        free(tmp);
     }
-
-    return true;
 }
 
-static void find_largest_file(char* filepath)
+void processFile(char* moviefp)
 {
-    DIR* currDir;
-    struct dirent* entry;
-    struct stat dirStat;
+    printf("Now processing the chosen file named %s\n", moviefp);
 
-    off_t max_bytes = 0;
-    char largest_filepath[256];
-    currDir = opendir(".");
+    char dirpath[19];
+    createDir(dirpath);
 
-    while((entry = readdir(currDir)) != NULL)
+    printf("Created directory with name %s\n", dirpath);
+
+    char *currLine = NULL;
+    size_t len = 0;
+
+    // Open the specified file for reading only
+    FILE *movieFile = fopen(moviefp, "r");
+    yearFile_t* head = NULL;
+
+    getline(&currLine, &len, movieFile);    // skip header
+
+    char* title = NULL;
+    int year = 0;
+    char* yearfp = NULL;
+
+    // read each line, call getFile to get a node, then add to linked list
+    while(getline(&currLine, &len, movieFile) != -1)
     {
-        stat(entry->d_name, &dirStat);
+        parseLine(currLine, &title, &year);
 
-        if(S_ISREG(dirStat.st_mode) && is_movie_file(entry->d_name))
-        {
-            if (dirStat.st_size > max_bytes)
-            {
-                max_bytes = dirStat.st_size;
-                strcpy(largest_filepath, entry->d_name);
-            }
-        }
+        yearfp = realloc(yearfp, 19 + strlen(title) + 2);
+        sprintf(yearfp, "%s/%d.txt", dirpath, year);
+
+        int fd = getFile(yearfp, &head, year);
+
+
+        write(fd, title, strlen(title));
     }
 
-    strcpy(filepath, largest_filepath);
-    printf("largest file was %s with %lld bytes\n", filepath, max_bytes);
-}
+    // Free the memory 
+    free(title);
+    free(yearfp);
+    free(currLine);
+    freeYearFiles(head);
 
-static void find_smallest_file(char* filepath)
-{
-    DIR* currDir;
-    struct dirent* entry;
-    struct stat dirStat;
-
-    off_t min_bytes = 0;
-    char smallest_filepath[256];
-    currDir = opendir(".");
-
-    while((entry = readdir(currDir)) != NULL)
-    {
-        stat(entry->d_name, &dirStat);
-
-        if(S_ISREG(dirStat.st_mode) && is_movie_file(entry->d_name))
-        {
-            if (dirStat.st_size < min_bytes || min_bytes == 0)  //replace the first find with appropriate bytes
-            {
-                min_bytes = dirStat.st_size;
-                strcpy(smallest_filepath, entry->d_name);
-            }
-        }
-    }
-
-    strcpy(filepath, smallest_filepath);
-    printf("smallest file was %s with %lld bytes\n", filepath, min_bytes);
-
-}
-
-static bool find_requested_file(char* filepath)
-{
-    printf("Enter the complete file name: ");
-    scanf("%s", filepath);
-
-    DIR* currDir;
-    struct dirent* entry;
-    struct stat dirStat;
-
-    currDir = opendir(".");
-
-    while((entry = readdir(currDir)) != NULL)
-    {
-        if(strcmp(entry->d_name, filepath) == 0)
-        {
-            printf("requested file %s\n", filepath);
-            return true;
-        }
-    }
-
-    printf("The file %s was not found. Try again\n", filepath);
-    return false;
-
+    // Close the file
+    fclose(movieFile);
 }
 
 
-void process_select()
+void parseLine(char* line, char** title, int* year)
 {
-    int usr_input = 0;
-    char file_name[256];
-    file_name[0] = '\0';        // initialize an empty string
+    char* savePtr;
+    char* token;
 
-    while(usr_input < 1 || usr_input > 3)
+    // first token for title
+    token = strtok_r(line, ",", &savePtr);
+    *title = realloc(*title, strlen(token) + 1);
+    if (title == NULL)
     {
-        printf
-        (
-            "\nWhich file you want to process?\n"
-            "Enter 1 to pick the largest file\n"
-            "Enter 2 to pick the smallest file\n"
-            "Enter 3 to specify the name of a file\n"
-            "Enter a choice from 1 to 3: "
-        );
-
-        scanf("%d", &usr_input);
-
-        switch (usr_input)
-        {
-            case 1:
-                find_largest_file(file_name);
-                break;
-            case 2:
-                find_smallest_file(file_name);
-                break;
-            case 3:
-                find_requested_file(file_name);
-                break;
-            default:
-                printf("You entered an incorrect choice. Try again.\n");
-                break;
-        }
+        printf("title reallocation unsuccessful");
+        free(title);
+        exit(1);
     }
+    else
+    {
+        // strcpy(*title, token);
+        sprintf(*title, "%s\n", token);
+    }
+    // second token for year
+    token = strtok_r(NULL, ",", &savePtr);
+    *year = atoi(token);
+}
+
+int getFile(char* fpath, yearFile_t** head, int year)
+{
+    // search each yearFile for a year matching node
+    yearFile_t* curr = *head;
+    yearFile_t* prev = NULL;
+
+    while (curr) 
+    {
+        if (curr->year == year)
+        {
+            return curr->yearfd;      
+        }
+
+        prev = curr;
+        curr = curr->next;
+        
+    }
+
+    // no matching year - create new node
+    yearFile_t* fptr = malloc(sizeof(yearFile_t));
+    fptr->year = year;
+    fptr->next = NULL;
+    fptr->yearfd = open(fpath, O_WRONLY | O_CREAT | O_APPEND, 0640);
+    
+    if (fptr->yearfd == -1) 
+    {
+        printf("open() has failed on %s\n", fpath);
+        perror("Error");
+        exit(1);
+    }
+
+    if(!prev)       // first node
+    {
+        *head = fptr;
+        return fptr->yearfd;
+    }
+    else
+    {
+        prev->next = fptr;
+        return fptr->yearfd;
+    }
+    
+}
+
+void createDir(char* dirpath)
+{
+    //generate a random number for extension
+    srand(time(NULL));
+    int r = rand() % 9999;
+    sprintf(dirpath, "%s%d", "wugr.movies.", r);
+    
+    mkdir(dirpath, 0750);
 }
